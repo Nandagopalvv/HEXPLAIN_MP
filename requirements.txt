@@ -1,0 +1,7 @@
+pyghidra
+rich
+openai
+python-dotenv
+fastapi
+uvicorn
+python-multipart
