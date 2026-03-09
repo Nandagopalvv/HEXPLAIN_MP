@@ -3,14 +3,41 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import shutil
 import os
+import hashlib
 import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional
 
 from src.analyzer import GhidraAnalyzer
 from src.explainer import CodeExplainer
+from src.rag_manager import RAGManager
+from src.malware_detector import detect_malware_behaviors
 
 app = FastAPI()
+
+# Initialize RAG
+rag_manager = RAGManager()
+
+# ── Performance: Default to llama3.2 (2GB, fits 100% in GPU) ──
+DEFAULT_MODEL = os.environ.get("HEXPLAIN_MODEL", "llama3.2")
+DEFAULT_PROVIDER = os.environ.get("HEXPLAIN_PROVIDER", "local")
+
+# ── Performance: Reuse single explainer instance ──
+_explainer_instance: Optional[CodeExplainer] = None
+
+def get_explainer(model: str = None, provider: str = None) -> CodeExplainer:
+    """Get or create a cached CodeExplainer instance."""
+    global _explainer_instance
+    model = model or DEFAULT_MODEL
+    provider = provider or DEFAULT_PROVIDER
+    
+    if (_explainer_instance is None or 
+        _explainer_instance.model != model or 
+        _explainer_instance.provider != provider):
+        _explainer_instance = CodeExplainer(
+            provider=provider, model=model, rag_manager=rag_manager
+        )
+    return _explainer_instance
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -27,17 +54,48 @@ current_analysis = {
     "binary_path": None
 }
 
+# ── Performance: Response cache (avoids re-running LLM for same binary) ──
+_response_cache = {
+    "security": {},   # binary_hash -> security report
+    "summary": {},    # binary_hash -> summary text
+    "malware": {},    # binary_hash -> malware behavior report
+}
+
+def _get_binary_hash(binary_path: str) -> str:
+    """Hash binary file for cache key."""
+    try:
+        h = hashlib.md5()
+        with open(binary_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return binary_path  # fallback to path as key
+
 class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]
-    model: str = "mistral"
-    provider: str = "local"
+    model: str = DEFAULT_MODEL
+    provider: str = DEFAULT_PROVIDER
 
 class AnalysisRequest(BaseModel):
     binary_path: str
 
+class SettingsRequest(BaseModel):
+    model: str = DEFAULT_MODEL
+    provider: str = DEFAULT_PROVIDER
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "model": DEFAULT_MODEL, "provider": DEFAULT_PROVIDER}
+
+@app.post("/settings")
+async def update_settings(request: SettingsRequest):
+    """Update the default model/provider at runtime."""
+    global DEFAULT_MODEL, DEFAULT_PROVIDER, _explainer_instance
+    DEFAULT_MODEL = request.model
+    DEFAULT_PROVIDER = request.provider
+    _explainer_instance = None  # Force re-creation with new settings
+    return {"model": DEFAULT_MODEL, "provider": DEFAULT_PROVIDER}
 
 @app.post("/upload")
 async def upload_binary(file: UploadFile = File(...)):
@@ -57,14 +115,13 @@ async def upload_binary(file: UploadFile = File(...)):
 async def analyze_binary(request: AnalysisRequest):
     try:
         analyzer = GhidraAnalyzer(request.binary_path)
-        # Decompile all
-        functions = analyzer.decompile(None) # None = attempt to find main/entry
-        
-        # If empty, maybe try to force decompile all? 
-        # For now, let's stick to the current logic in Analyzer
+        functions = analyzer.decompile(None)
         
         current_analysis["functions"] = functions
         current_analysis["binary_path"] = request.binary_path
+        
+        # Index for RAG
+        rag_manager.index_functions(functions, request.binary_path)
         
         return {"functions": functions}
     except Exception as e:
@@ -75,36 +132,64 @@ async def analyze_binary(request: AnalysisRequest):
 @app.post("/analyze_security")
 async def analyze_security(request: AnalysisRequest):
     try:
+        binary_hash = _get_binary_hash(request.binary_path)
+        
+        # ── Performance: Check response cache first ──
+        if binary_hash in _response_cache["security"]:
+            print(f"[CACHE HIT] Security report for {request.binary_path}")
+            return _response_cache["security"][binary_hash]
+        
         analyzer = GhidraAnalyzer(request.binary_path)
-        results = analyzer.analyze_security()
+        
+        # Use cached decompilation if available
+        decompiled = current_analysis.get("functions")
+        if not decompiled or current_analysis.get("binary_path") != request.binary_path:
+            decompiled = analyzer.decompile(None)
+            current_analysis["functions"] = decompiled
+            current_analysis["binary_path"] = request.binary_path
+            rag_manager.index_functions(decompiled, request.binary_path)
+        
+        results = analyzer.analyze_security(decompiled_functions=decompiled)
         
         # Generate Natural Language Explanation
-        # We use default provider for now (likely local in this setup)
-        explainer = CodeExplainer(provider="local", model="mistral") 
+        explainer = get_explainer()
         explanation = explainer.explain_security_report(results)
         
         results["explanation"] = explanation
         
+        # ── Performance: Cache the response ──
+        _response_cache["security"][binary_hash] = results
+        
         return results
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/explain_program")
 async def explain_program(request: AnalysisRequest):
     try:
-        # Check cache first
-        functions = current_analysis.get("functions")
+        binary_hash = _get_binary_hash(request.binary_path)
         
-        # If not in cache or path different, re-analyze (or error if we want strictness)
-        # For robustnes, let's re-analyze if needed
+        # ── Performance: Check response cache first ──
+        if binary_hash in _response_cache["summary"]:
+            print(f"[CACHE HIT] Program summary for {request.binary_path}")
+            return {"summary": _response_cache["summary"][binary_hash]}
+        
+        # Check decompilation cache
+        functions = current_analysis.get("functions")
         if not functions or current_analysis.get("binary_path") != request.binary_path:
              analyzer = GhidraAnalyzer(request.binary_path)
              functions = analyzer.decompile(None)
              current_analysis["functions"] = functions
              current_analysis["binary_path"] = request.binary_path
         
-        explainer = CodeExplainer(provider="local", model="mistral")
+        explainer = get_explainer()
         summary = explainer.explain_program(functions)
+        
+        # ── Performance: Cache the response ──
+        _response_cache["summary"][binary_hash] = summary
         
         return {"summary": summary}
     except Exception as e:
@@ -114,14 +199,53 @@ async def explain_program(request: AnalysisRequest):
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    # Construct context from current analysis if available
-    # We'll prepend a system message if it's the start of convo
-    
-    explainer = CodeExplainer(provider=req.provider, model=req.model)
-    
-    # Check if context is needed
-    # We could inject the current function code if the user is asking about it
-    # For now, we rely on the client sending the conversation history
-    
+    explainer = get_explainer(model=req.model, provider=req.provider)
     response = explainer.chat(req.messages)
     return {"reply": response}
+
+@app.post("/analyze_malware")
+async def analyze_malware(request: AnalysisRequest):
+    """Scans decompiled code for malware behavioral indicators."""
+    try:
+        binary_hash = _get_binary_hash(request.binary_path)
+        
+        # Check cache
+        if binary_hash in _response_cache["malware"]:
+            print(f"[CACHE HIT] Malware report for {request.binary_path}")
+            return _response_cache["malware"][binary_hash]
+        
+        # Get decompiled functions (reuse cache)
+        functions = current_analysis.get("functions")
+        if not functions or current_analysis.get("binary_path") != request.binary_path:
+            analyzer = GhidraAnalyzer(request.binary_path)
+            functions = analyzer.decompile(None)
+            current_analysis["functions"] = functions
+            current_analysis["binary_path"] = request.binary_path
+        
+        # Run behavioral detection
+        malware_report = detect_malware_behaviors(functions)
+        
+        # Generate AI threat assessment if indicators found
+        if malware_report["total_indicators"] > 0:
+            explainer = get_explainer()
+            ai_assessment = explainer.explain_malware_report(malware_report)
+            malware_report["ai_assessment"] = ai_assessment
+        else:
+            malware_report["ai_assessment"] = "No suspicious behavioral indicators were detected in the decompiled code. The binary appears to be benign based on static behavioral analysis. Note: This does not guarantee safety — obfuscated or packed malware may evade static detection."
+        
+        # Cache response
+        _response_cache["malware"][binary_hash] = malware_report
+        
+        return malware_report
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/cache")
+async def clear_cache():
+    """Clear all response caches."""
+    _response_cache["security"].clear()
+    _response_cache["summary"].clear()
+    _response_cache["malware"].clear()
+    return {"status": "cache cleared"}

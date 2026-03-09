@@ -1,0 +1,11 @@
+{
+    "name": "hexplain",
+    "private": true,
+    "description": "Root package.json — delegates npm commands to hexplain-ui",
+    "scripts": {
+        "dev": "npm run dev --prefix hexplain-ui",
+        "build": "npm run build --prefix hexplain-ui",
+        "install:ui": "npm install --prefix hexplain-ui",
+        "preview": "npm run preview --prefix hexplain-ui"
+    }
+}

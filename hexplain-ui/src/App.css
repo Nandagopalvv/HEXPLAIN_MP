@@ -250,14 +250,18 @@
 .modal-content {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    width: 500px;
-    max-width: 90%;
-    max-height: 90vh;
+    width: 800px;
+    max-width: 95%;
+    max-height: 95vh;
     border-radius: 12px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.modal-wide {
+    width: 1100px;
 }
 
 .modal-header {
@@ -267,6 +271,33 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.download-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: transparent;
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.download-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
 }
 
 .modal-header h3 {
@@ -382,4 +413,377 @@
 
 .security-summary p:last-child {
     margin: 0;
+}
+
+/* Wide modal for security */
+.modal-wide {
+    width: 700px;
+}
+
+/* Vulnerable Call Sites */
+.call-sites-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.call-site-card {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+}
+
+.call-site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.call-site-func {
+    font-weight: 600;
+    color: var(--accent-primary);
+    font-size: 0.9rem;
+}
+
+.call-site-line {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.call-site-danger {
+    color: #ef4444;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.4rem;
+}
+
+.call-site-code {
+    display: block;
+    background: var(--bg-primary);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: #fca5a5;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* Fortified Functions */
+.fortified-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.fortified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    color: #4ade80;
+    padding: 0.3rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* CVE Cards */
+.cve-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.cve-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+}
+
+.cve-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+}
+
+.cve-id {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.cve-severity {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cve-lib {
+    font-size: 0.8rem;
+    color: var(--accent-primary);
+    margin-bottom: 0.3rem;
+}
+
+.cve-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Linked Libraries */
+.lib-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.lib-tag {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Section spacing */
+.section {
+    margin-bottom: 1.5rem;
+}
+
+.section h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+/* Mitigation grid - accommodate 5 items */
+.mitigation-card.warn {
+    border-color: #f59e0b;
+    color: #f59e0b;
+}
+
+/* Loading spinner */
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Malware Button */
+.malware-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid #ef4444;
+    color: #ef4444;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    width: 100%;
+    transition: all 0.2s;
+}
+
+.malware-btn:hover {
+    background: #ef4444;
+    color: white;
+}
+
+/* Malware Overview */
+.malware-overview {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.risk-score-card {
+    background: var(--bg-tertiary);
+    border: 2px solid;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    text-align: center;
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.risk-score-number {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.risk-score-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.risk-level-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.75rem;
+    border-radius: 20px;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0.3rem;
+}
+
+/* Severity Breakdown */
+.severity-breakdown {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.severity-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.severity-item.critical {
+    border-color: rgba(255, 34, 34, 0.3);
+}
+
+.severity-item.high {
+    border-color: rgba(255, 102, 0, 0.3);
+}
+
+.severity-item.medium {
+    border-color: rgba(255, 170, 0, 0.3);
+}
+
+.severity-item.low {
+    border-color: rgba(68, 187, 68, 0.3);
+}
+
+.severity-count {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.severity-item.critical .severity-count {
+    color: #ff2222;
+}
+
+.severity-item.high .severity-count {
+    color: #ff6600;
+}
+
+.severity-item.medium .severity-count {
+    color: #ffaa00;
+}
+
+.severity-item.low .severity-count {
+    color: #44bb44;
+}
+
+.severity-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Malware Findings */
+.cat-count {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.malware-findings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.malware-finding-card {
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.12);
+    border-radius: 8px;
+    padding: 0.65rem 0.85rem;
+}
+
+.finding-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.finding-severity {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+
+.finding-desc {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.finding-location {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
 }
