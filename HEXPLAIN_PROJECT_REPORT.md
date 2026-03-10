@@ -622,24 +622,53 @@ Output: "Full" | "Partial" | False
 7. Return False
 ```
 
-#### 9.2.3 RAG Pipeline
+#### 9.2.3 RAG Streaming Pipeline
+
+```
+Algorithm: RAG_StreamingIndex
+Input: Decompiled functions F, Binary path B
+Output: Vector collection in ChromaDB
+
+1. For chunk in SequentialStream(F):          // Stream chunks one by one
+   a. embedding = Ollama.embed(chunk)         // Sequential embedding
+   b. collection.add(chunk, embedding)        // Add to local list
+   c. If list_size >= 50: 
+      i. Flush to ChromaDB                    // Micro-batching
+      ii. Clear list
+2. Flush remaining items
+```
 
 ```
 Algorithm: RAG_EnhancedChat
 Input: User query Q, Chat history H
 Output: AI Response R
 
-1. embedding = Ollama.embed(Q)           // Generate query embedding
-2. relevant_code = ChromaDB.query(        // Semantic similarity search
-       embedding, n_results=3)
-3. context = Format(relevant_code)        // Build context string
-4. enhanced_messages = [                   // Inject context
-       {system: context},
-       ...H,
-       {user: Q}
-   ]
-5. R = LLM.complete(enhanced_messages)    // Generate response
-6. Return R
+1. context_snippets = RAG.query(Q, results=3) // Retrieve top 3 chunks
+2. optimized_prompt = FormatPrompt(           // Build context-aware prompt
+       SystemPrompt, 
+       context_snippets, 
+       Q)
+3. For token in LLM.stream(optimized_prompt): // Low-latency streaming
+   a. Yield token to UI
+```
+
+#### 9.2.4 Malware Detection Algorithm (VirusTotal)
+
+```
+Algorithm: MalwareAnalysis
+Input: Binary path B
+Output: Threat Assessment Report
+
+1. hash = SHA256(B)
+2. report = VirusTotal.Lookup(hash)           // Phase 1: Hash Check
+3. If report.NotFound:
+   a. upload_id = VirusTotal.Upload(B)
+   b. While status != "completed":
+      i. status = VirusTotal.GetStatus(upload_id)
+      ii. AdaptiveSleep(status)
+   c. report = VirusTotal.GetResults(upload_id)
+4. overall_risk = Evaluate(report.stats)
+5. Return Format(report, overall_risk)
 ```
 
 ---
