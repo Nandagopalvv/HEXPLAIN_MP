@@ -8,3 +8,4 @@ python-multipart
 pyelftools
 chromadb
 requests
+vt-py

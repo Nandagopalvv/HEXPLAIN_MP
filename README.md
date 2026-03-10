@@ -29,7 +29,7 @@ Hexplain reverses binaries and explains them using AI.
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
+python3 -m uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 2. Setup Frontend

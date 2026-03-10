@@ -16,4 +16,4 @@ else
 fi
 
 echo "Starting Hexplain Backend..."
-exec uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
+exec ./venv/bin/uvicorn src.server:app --reload --host 0.0.0.0 --port 8000

@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, FileCode, MessageSquare, Terminal, Cpu, Shield, X, AlertTriangle, CheckCircle, Download, Bug } from 'lucide-react';
+import {
+    Upload, FileCode, MessageSquare, Terminal, Cpu, Shield, X,
+    AlertTriangle, CheckCircle, Download, Bug, ChevronRight,
+    ChevronLeft, ChevronDown, Zap, Brain, Hash, Search,
+    FolderOpen, RefreshCw, Maximize2, Code2
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
@@ -9,60 +14,62 @@ import './App.css';
 
 const API_BASE = "http://localhost:8000";
 
+// ─── Utility ─────────────────────────────────────────────
+function downloadFile(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ─── Main App ─────────────────────────────────────────────
 function App() {
     const [file, setFile] = useState(null);
     const [uploadedPath, setUploadedPath] = useState(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [functions, setFunctions] = useState({});
     const [selectedFunction, setSelectedFunction] = useState(null);
-    const [chatOpen, setChatOpen] = useState(true);
+    const [funcIndexOpen, setFuncIndexOpen] = useState(true);
+    const [funcSearch, setFuncSearch] = useState('');
 
-    // Security Analysis State
+    // Modals
     const [securityReport, setSecurityReport] = useState(null);
     const [showSecurity, setShowSecurity] = useState(false);
     const [analyzingSecurity, setAnalyzingSecurity] = useState(false);
-
-    // Program Summary State
     const [summaryReport, setSummaryReport] = useState(null);
     const [showSummary, setShowSummary] = useState(false);
     const [analyzingSummary, setAnalyzingSummary] = useState(false);
-
-    // Malware Analysis State
     const [malwareReport, setMalwareReport] = useState(null);
     const [showMalware, setShowMalware] = useState(false);
     const [analyzingMalware, setAnalyzingMalware] = useState(false);
 
-    // Upload Handler
+    const fileInputRef = useRef(null);
+    const codeRef = useRef(null);
+
     const handleUpload = async (e) => {
         const uploadedFile = e.target.files[0];
         if (!uploadedFile) return;
-
         setFile(uploadedFile);
         setAnalyzing(true);
-        setSecurityReport(null);
-        setSummaryReport(null);
+        setSecurityReport(null); setSummaryReport(null); setMalwareReport(null);
+        setFunctions({}); setSelectedFunction(null);
 
-        // 1. Upload
         const formData = new FormData();
         formData.append('file', uploadedFile);
-
         try {
             const uploadRes = await axios.post(`${API_BASE}/upload`, formData);
             const filePath = uploadRes.data.path;
             setUploadedPath(filePath);
-
-            // 2. Analyze
             const analyzeRes = await axios.post(`${API_BASE}/analyze`, { binary_path: filePath });
-            setFunctions(analyzeRes.data.functions);
-
-            // Select first function by default
-            const funcNames = Object.keys(analyzeRes.data.functions);
-            if (funcNames.length > 0) setSelectedFunction(funcNames[0]);
-
+            const funcs = analyzeRes.data.functions;
+            setFunctions(funcs);
+            const names = Object.keys(funcs);
+            if (names.length > 0) setSelectedFunction(names[0]);
         } catch (err) {
-            console.error("Error:", err);
-            const msg = err.response?.data?.detail || err.message || "Analysis failed";
-            alert(`Analysis failed: ${msg}`);
+            console.error(err);
+            alert(`Analysis failed: ${err.response?.data?.detail || err.message}`);
         } finally {
             setAnalyzing(false);
         }
@@ -70,132 +77,280 @@ function App() {
 
     const handleSecurityCheck = async () => {
         if (!uploadedPath) return;
-        setAnalyzingSecurity(true);
-        setShowSecurity(true);
+        setAnalyzingSecurity(true); setShowSecurity(true);
         try {
             const res = await axios.post(`${API_BASE}/analyze_security`, { binary_path: uploadedPath });
             setSecurityReport(res.data);
-        } catch (err) {
-            console.error(err);
-            alert("Security analysis failed");
-            setShowSecurity(false);
-        } finally {
-            setAnalyzingSecurity(false);
-        }
+        } catch { alert("Security analysis failed"); setShowSecurity(false); }
+        finally { setAnalyzingSecurity(false); }
     };
 
     const handleProgramSummary = async () => {
         if (!uploadedPath) return;
-        setAnalyzingSummary(true);
-        setShowSummary(true);
+        setAnalyzingSummary(true); setShowSummary(true);
         try {
             const res = await axios.post(`${API_BASE}/explain_program`, { binary_path: uploadedPath });
             setSummaryReport(res.data.summary);
-        } catch (err) {
-            console.error(err);
-            alert("Program summary failed");
-            setShowSummary(false);
-        } finally {
-            setAnalyzingSummary(false);
-        }
+        } catch { alert("Program summary failed"); setShowSummary(false); }
+        finally { setAnalyzingSummary(false); }
     };
 
     const handleMalwareScan = async () => {
         if (!uploadedPath) return;
-        setAnalyzingMalware(true);
-        setShowMalware(true);
+        setAnalyzingMalware(true); setShowMalware(true);
         try {
             const res = await axios.post(`${API_BASE}/analyze_malware`, { binary_path: uploadedPath });
             setMalwareReport(res.data);
-        } catch (err) {
-            console.error(err);
-            alert("Malware analysis failed");
-            setShowMalware(false);
-        } finally {
-            setAnalyzingMalware(false);
-        }
+        } catch { alert("Malware analysis failed"); setShowMalware(false); }
+        finally { setAnalyzingMalware(false); }
     };
 
+    const filteredFunctions = Object.keys(functions).filter(fn =>
+        fn.toLowerCase().includes(funcSearch.toLowerCase())
+    );
+
     return (
-        <div className="app-container">
-            {/* Sidebar */}
-            <aside className="sidebar">
-                <div className="logo">
-                    <Cpu className="icon-accent" /> Hexplain
+        <div className="hx-root">
+            {/* ── Top Navbar ── */}
+            <header className="hx-navbar">
+                <div className="hx-logo">
+                    <div className="hx-logo-icon"><Cpu size={20} /></div>
+                    <span className="hx-logo-text">Hexplain</span>
+                    <span className="hx-logo-badge">RE Platform</span>
                 </div>
 
-                <div className="upload-section">
-                    <label className="upload-btn">
-                        <Upload size={16} /> Load Binary
-                        <input type="file" onChange={handleUpload} style={{ display: 'none' }} />
-                    </label>
-                    {file && (
-                        <div className="file-actions">
-                            <div className="file-info">{file.name}</div>
-                            <button className="security-btn" onClick={handleSecurityCheck}>
-                                <Shield size={14} /> Security Check
-                            </button>
-                            <button className="summary-btn" onClick={handleProgramSummary} style={{ marginTop: '8px' }}>
-                                <FileCode size={14} /> Program Summary
-                            </button>
-                            <button className="malware-btn" onClick={handleMalwareScan} style={{ marginTop: '8px' }}>
-                                <Bug size={14} /> Malware Scan
-                            </button>
+                <div className="hx-nav-center">
+                    {file ? (
+                        <div className="hx-binary-pill">
+                            <Code2 size={12} />
+                            <span>{file.name}</span>
+                            {analyzing && <span className="hx-analyzing-badge">Analyzing…</span>}
                         </div>
-                    )}
-                </div>
-
-                <div className="functions-list">
-                    <h3>Functions</h3>
-                    {analyzing ? (
-                        <div className="loading">Analyzing...</div>
                     ) : (
-                        <ul>
-                            {Object.keys(functions).map(fn => (
-                                <li
-                                    key={fn}
-                                    className={selectedFunction === fn ? 'active' : ''}
-                                    onClick={() => setSelectedFunction(fn)}
-                                >
-                                    <Terminal size={14} /> {fn}
-                                </li>
-                            ))}
-                            {Object.keys(functions).length === 0 && !analyzing && <li className="empty">No functions loaded</li>}
-                        </ul>
+                        <span className="hx-nav-hint">Upload a binary to begin</span>
                     )}
                 </div>
-            </aside>
 
-            {/* Main Content */}
-            <main className="main-content">
-                {selectedFunction ? (
-                    <div className="code-view">
-                        <header>
-                            <h2>{selectedFunction}</h2>
-                        </header>
-                        <div className="editor-container">
-                            <SyntaxHighlighter
-                                language="c"
-                                style={atomOneDark}
-                                customStyle={{ background: 'transparent', fontSize: '14px' }}
-                                showLineNumbers={true}
-                            >
-                                {functions[selectedFunction] || "// No code"}
-                            </SyntaxHighlighter>
+                <div className="hx-nav-actions">
+                    <button className="hx-upload-btn" onClick={() => fileInputRef.current?.click()}>
+                        <Upload size={15} />
+                        {file ? 'Load New Binary' : 'Upload Binary'}
+                    </button>
+                    <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleUpload} />
+                </div>
+            </header>
+
+            {/* ── Three-panel body ── */}
+            <div className="hx-body">
+
+                {/* ── LEFT SIDEBAR ── */}
+                <aside className="hx-sidebar">
+                    <div className="hx-sidebar-section">
+                        <p className="hx-section-label">Analysis Tools</p>
+
+                        <button
+                            className={`hx-tool-btn summary ${!uploadedPath ? 'disabled' : ''}`}
+                            onClick={handleProgramSummary}
+                            disabled={!uploadedPath}
+                        >
+                            <div className="hx-tool-icon"><FileCode size={22} /></div>
+                            <div className="hx-tool-text">
+                                <span className="hx-tool-name">Program Summary</span>
+                                <span className="hx-tool-desc">High-level narrative report</span>
+                            </div>
+                            {analyzingSummary && <div className="hx-btn-spinner" />}
+                        </button>
+
+                        <button
+                            className={`hx-tool-btn malware ${!uploadedPath ? 'disabled' : ''}`}
+                            onClick={handleMalwareScan}
+                            disabled={!uploadedPath}
+                        >
+                            <div className="hx-tool-icon"><Bug size={22} /></div>
+                            <div className="hx-tool-text">
+                                <span className="hx-tool-name">Malware Analysis</span>
+                                <span className="hx-tool-desc">Behavioral threat detection</span>
+                            </div>
+                            {analyzingMalware && <div className="hx-btn-spinner" />}
+                        </button>
+
+                        <button
+                            className={`hx-tool-btn security ${!uploadedPath ? 'disabled' : ''}`}
+                            onClick={handleSecurityCheck}
+                            disabled={!uploadedPath}
+                        >
+                            <div className="hx-tool-icon"><Shield size={22} /></div>
+                            <div className="hx-tool-text">
+                                <span className="hx-tool-name">Security Check</span>
+                                <span className="hx-tool-desc">Mitigations, CVEs & flaws</span>
+                            </div>
+                            {analyzingSecurity && <div className="hx-btn-spinner" />}
+                        </button>
+                    </div>
+
+                    <div className="hx-sidebar-section hx-upload-area">
+                        <p className="hx-section-label">Project File</p>
+                        <div
+                            className="hx-dropzone"
+                            onClick={() => fileInputRef.current?.click()}
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={e => {
+                                e.preventDefault();
+                                const f = e.dataTransfer.files[0];
+                                if (f) fileInputRef.current && handleUpload({ target: { files: [f] } });
+                            }}
+                        >
+                            <FolderOpen size={24} className="hx-dropzone-icon" />
+                            {file ? (
+                                <>
+                                    <span className="hx-dropzone-filename">{file.name}</span>
+                                    <span className="hx-dropzone-sub">Click to replace</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="hx-dropzone-title">Drop binary here</span>
+                                    <span className="hx-dropzone-sub">or click to browse</span>
+                                </>
+                            )}
                         </div>
                     </div>
-                ) : (
-                    <div className="placeholder">
-                        <Cpu size={64} opacity={0.2} />
-                        <p>Upload a binary to start reverse engineering</p>
+
+                    <div className="hx-sidebar-footer">
+                        <div className="hx-status-dot active" />
+                        <span>Backend connected</span>
                     </div>
-                )}
-            </main>
+                </aside>
 
-            {/* Chat Panel */}
-            <ChatPanel open={chatOpen} toggle={() => setChatOpen(!chatOpen)} />
+                {/* ── CENTER: Code Editor ── */}
+                <main className="hx-center">
+                    {/* Code editor header */}
+                    <div className="hx-editor-header">
+                        <div className="hx-editor-tabs">
+                            {selectedFunction && (
+                                <div className="hx-editor-tab active">
+                                    <Terminal size={13} />
+                                    <span>{selectedFunction}</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="hx-editor-actions">
+                            <button
+                                className="hx-icon-btn"
+                                title="Toggle function index"
+                                onClick={() => setFuncIndexOpen(v => !v)}
+                            >
+                                {funcIndexOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+                            </button>
+                        </div>
+                    </div>
 
-            {/* Security Modal */}
+                    <div className="hx-editor-body">
+                        {/* Function Index Panel */}
+                        <AnimatePresence>
+                            {funcIndexOpen && (
+                                <motion.div
+                                    className="hx-func-index"
+                                    initial={{ width: 0, opacity: 0 }}
+                                    animate={{ width: 200, opacity: 1 }}
+                                    exit={{ width: 0, opacity: 0 }}
+                                    transition={{ duration: 0.25 }}
+                                >
+                                    <div className="hx-func-index-header">
+                                        <Hash size={13} />
+                                        <span>Functions</span>
+                                        <span className="hx-func-count">{Object.keys(functions).length}</span>
+                                    </div>
+                                    <div className="hx-func-search">
+                                        <Search size={12} />
+                                        <input
+                                            type="text"
+                                            placeholder="Filter…"
+                                            value={funcSearch}
+                                            onChange={e => setFuncSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <ul className="hx-func-list">
+                                        {analyzing ? (
+                                            <li className="hx-func-loading">
+                                                <div className="hx-mini-spinner" />
+                                                Decompiling…
+                                            </li>
+                                        ) : filteredFunctions.length === 0 ? (
+                                            <li className="hx-func-empty">
+                                                {Object.keys(functions).length === 0
+                                                    ? 'No binary loaded'
+                                                    : 'No matches'}
+                                            </li>
+                                        ) : filteredFunctions.map(fn => (
+                                            <li
+                                                key={fn}
+                                                className={`hx-func-item ${selectedFunction === fn ? 'active' : ''}`}
+                                                onClick={() => setSelectedFunction(fn)}
+                                            >
+                                                <Terminal size={11} className="hx-func-icon" />
+                                                <span className="hx-func-name">{fn}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* Code View */}
+                        <div className="hx-code-view" ref={codeRef}>
+                            {selectedFunction && functions[selectedFunction] ? (
+                                <SyntaxHighlighter
+                                    language="c"
+                                    style={atomOneDark}
+                                    showLineNumbers={true}
+                                    customStyle={{
+                                        margin: 0,
+                                        background: 'transparent',
+                                        fontSize: '13px',
+                                        lineHeight: '1.6',
+                                        height: '100%',
+                                        padding: '1rem',
+                                    }}
+                                    lineNumberStyle={{
+                                        color: '#3a4a6a',
+                                        minWidth: '3em',
+                                        paddingRight: '1em',
+                                        userSelect: 'none',
+                                    }}
+                                >
+                                    {functions[selectedFunction]}
+                                </SyntaxHighlighter>
+                            ) : (
+                                <div className="hx-code-placeholder">
+                                    {analyzing ? (
+                                        <>
+                                            <div className="hx-large-spinner" />
+                                            <p>Decompiling binary with Ghidra…</p>
+                                            <span>This may take a moment</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Cpu size={64} className="hx-placeholder-icon" />
+                                            <p>Upload a binary to start reverse engineering</p>
+                                            <span>Supports ELF, PE, Mach-O and more</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </main>
+
+                {/* ── RIGHT: AI Assistant ── */}
+                <ChatPanel
+                    selectedFunction={selectedFunction}
+                    currentCode={selectedFunction ? functions[selectedFunction] : null}
+                    binaryName={file ? file.name : null}
+                    onExplainFunction={() => {/* handled inside */ }}
+                />
+            </div>
+
+            {/* ── Modals ── */}
             <AnimatePresence>
                 {showSecurity && (
                     <SecurityModal
@@ -223,599 +378,410 @@ function App() {
     );
 }
 
-function downloadFile(content, filename) {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}
+// ─── AI Chat Panel ────────────────────────────────────────
+function ChatPanel({ selectedFunction, currentCode, binaryName }) {
+    const [messages, setMessages] = useState([
+        {
+            role: 'assistant',
+            content: "Hello! I'm **Hexplain Assistant**, your AI-powered reverse engineering analyst.\n\nUpload a binary, select a function, and ask me anything:\n- *\"What does this function do?\"*\n- *\"Is there a buffer overflow risk here?\"*\n- *\"Explain the control flow\"*"
+        }
+    ]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    const chatBodyRef = useRef(null);
 
-function generateSecurityReportText(report) {
-    const lines = [];
-    const timestamp = new Date().toLocaleString();
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push('           HEXPLAIN — SECURITY ANALYSIS REPORT');
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push(`Generated: ${timestamp}`);
-    lines.push('');
+    useEffect(() => {
+        if (chatBodyRef.current) {
+            chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+        }
+    }, [messages, loading]);
 
-    // AI Assessment
-    if (report.explanation) {
-        lines.push('───────────────────────────────────────────────────');
-        lines.push('🔍 SECURITY ASSESSMENT (AI-Generated)');
-        lines.push('───────────────────────────────────────────────────');
-        lines.push(report.explanation);
-        lines.push('');
-    }
+    const sendMessage = async (text) => {
+        const content = text || input;
+        if (!content.trim()) return;
 
-    // Mitigations
-    lines.push('───────────────────────────────────────────────────');
-    lines.push('🛡️  MITIGATIONS');
-    lines.push('───────────────────────────────────────────────────');
-    for (const [key, val] of Object.entries(report.mitigations || {})) {
-        const status = val === true ? '✅ Enabled' : val === false ? '❌ Disabled' : `⚠️  ${val}`;
-        lines.push(`  ${key.padEnd(12)} ${status}`);
-    }
-    lines.push('');
+        const newMsg = { role: 'user', content };
+        const historyToSend = [...messages, newMsg];
+        setMessages(prev => [...prev, newMsg]);
+        setInput('');
+        setLoading(true);
 
-    // Flaws
-    lines.push('───────────────────────────────────────────────────');
-    lines.push('⚠️  POTENTIAL FLAWS');
-    lines.push('───────────────────────────────────────────────────');
-    if (report.flaws && report.flaws.length > 0) {
-        report.flaws.forEach(f => lines.push(`  • ${f}`));
-    } else {
-        lines.push('  ✅ No obvious flaws detected.');
-    }
-    lines.push('');
-
-    // Vulnerable Call Sites
-    if (report.vulnerable_call_sites && report.vulnerable_call_sites.length > 0) {
-        lines.push('───────────────────────────────────────────────────');
-        lines.push('📍 VULNERABLE CALL SITES');
-        lines.push('───────────────────────────────────────────────────');
-        report.vulnerable_call_sites.forEach(site => {
-            lines.push(`  Function: ${site.function} | Line: ${site.line}`);
-            lines.push(`  Danger:   ${site.dangerous_call}()`);
-            lines.push(`  Code:     ${site.context}`);
-            lines.push('');
-        });
-    }
-
-    // Fortified Functions
-    if (report.fortified_functions && report.fortified_functions.length > 0) {
-        lines.push('───────────────────────────────────────────────────');
-        lines.push('✅ FORTIFIED FUNCTIONS (FORTIFY_SOURCE)');
-        lines.push('───────────────────────────────────────────────────');
-        report.fortified_functions.forEach(fn => lines.push(`  • ${fn}`));
-        lines.push('');
-    }
-
-    // Known CVEs
-    if (report.known_cves && report.known_cves.length > 0) {
-        lines.push('───────────────────────────────────────────────────');
-        lines.push('🗃️  KNOWN CVEs');
-        lines.push('───────────────────────────────────────────────────');
-        report.known_cves.forEach(cve => {
-            lines.push(`  ${cve.cve_id} [${cve.severity}]`);
-            lines.push(`  Library: ${cve.library}`);
-            lines.push(`  ${cve.description}`);
-            lines.push('');
-        });
-    }
-
-    // Linked Libraries
-    if (report.linked_libraries && report.linked_libraries.length > 0) {
-        lines.push('───────────────────────────────────────────────────');
-        lines.push('📦 LINKED LIBRARIES');
-        lines.push('───────────────────────────────────────────────────');
-        report.linked_libraries.forEach(lib => lines.push(`  • ${lib}`));
-        lines.push('');
-    }
-
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push('              End of Report — Hexplain');
-    lines.push('═══════════════════════════════════════════════════');
-    return lines.join('\n');
-}
-
-function generateSummaryReportText(summary) {
-    const lines = [];
-    const timestamp = new Date().toLocaleString();
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push('          HEXPLAIN — PROGRAM SUMMARY REPORT');
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push(`Generated: ${timestamp}`);
-    lines.push('');
-    lines.push(summary);
-    lines.push('');
-    lines.push('═══════════════════════════════════════════════════');
-    lines.push('              End of Report — Hexplain');
-    lines.push('═══════════════════════════════════════════════════');
-    return lines.join('\n');
-}
-
-function SecurityModal({ report, loading, close }) {
-    const severityColor = (sev) => {
-        const s = (sev || '').toUpperCase();
-        if (s === 'CRITICAL') return '#ff4444';
-        if (s === 'HIGH') return '#ff8800';
-        if (s === 'MEDIUM') return '#ffcc00';
-        if (s === 'LOW') return '#44cc44';
-        return '#888';
-    };
-
-    const handleDownload = () => {
-        if (!report) return;
-        const text = generateSecurityReportText(report);
-        downloadFile(text, `hexplain_security_report_${Date.now()}.txt`);
-    };
-
-    return (
-        <motion.div
-            className="modal-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={close}
-        >
-            <motion.div
-                className="modal-content modal-wide"
-                initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <h3><Shield size={20} /> Security Analysis</h3>
-                    <div className="modal-header-actions">
-                        {report && !loading && (
-                            <button className="download-btn" onClick={handleDownload} title="Download Report">
-                                <Download size={16} /> Download
-                            </button>
-                        )}
-                        <button className="close-btn" onClick={close}><X size={18} /></button>
-                    </div>
-                </div>
-
-                <div className="modal-body">
-                    {loading ? (
-                        <div className="loading-state">
-                            <div className="spinner"></div>
-                            <p>Running comprehensive security scan...</p>
-                        </div>
-                    ) : report ? (
-                        <div className="report-container">
-                            {/* AI Security Assessment */}
-                            {report.explanation && (
-                                <div className="section summary">
-                                    <h4>🔍 Security Assessment</h4>
-                                    <div className="security-summary">
-                                        <ReactMarkdown>{report.explanation}</ReactMarkdown>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Mitigations Grid */}
-                            <div className="section mitigations">
-                                <h4>🛡️ Mitigations</h4>
-                                <div className="mitigation-grid">
-                                    {Object.entries(report.mitigations).map(([key, val]) => (
-                                        <div key={key} className={`mitigation-card ${val === true || val === 'Full' ? 'safe' : val === false ? 'danger' : 'warn'}`}>
-                                            <div className="status-icon">
-                                                {val === true || val === 'Full' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-                                            </div>
-                                            <div className="mitigation-name">{key}</div>
-                                            <div className="mitigation-status">{val === true ? 'Enabled' : val === false ? 'Disabled' : String(val)}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Potential Flaws */}
-                            <div className="section flaws">
-                                <h4>⚠️ Potential Flaws</h4>
-                                {report.flaws.length === 0 ? (
-                                    <div className="empty-flaws"><CheckCircle size={14} /> No obvious flaws detected.</div>
-                                ) : (
-                                    <ul className="flaws-list">
-                                        {report.flaws.map((flaw, i) => (
-                                            <li key={i}><AlertTriangle size={14} className="icon-danger" /> {flaw}</li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-
-                            {/* Vulnerable Call Sites */}
-                            {report.vulnerable_call_sites && report.vulnerable_call_sites.length > 0 && (
-                                <div className="section call-sites">
-                                    <h4>📍 Vulnerable Call Sites</h4>
-                                    <div className="call-sites-list">
-                                        {report.vulnerable_call_sites.map((site, i) => (
-                                            <div key={i} className="call-site-card">
-                                                <div className="call-site-header">
-                                                    <span className="call-site-func">{site.function}</span>
-                                                    <span className="call-site-line">Line {site.line}</span>
-                                                </div>
-                                                <div className="call-site-danger">
-                                                    <AlertTriangle size={12} /> {site.dangerous_call}()
-                                                </div>
-                                                <code className="call-site-code">{site.context}</code>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Fortified Functions */}
-                            {report.fortified_functions && report.fortified_functions.length > 0 && (
-                                <div className="section fortified">
-                                    <h4>✅ Fortified Functions (FORTIFY_SOURCE)</h4>
-                                    <div className="fortified-list">
-                                        {report.fortified_functions.map((fn, i) => (
-                                            <span key={i} className="fortified-badge">
-                                                <CheckCircle size={12} /> {fn}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Known CVEs */}
-                            {report.known_cves && report.known_cves.length > 0 && (
-                                <div className="section cves">
-                                    <h4>🗃️ Known CVEs</h4>
-                                    <div className="cve-list">
-                                        {report.known_cves.map((cve, i) => (
-                                            <div key={i} className="cve-card">
-                                                <div className="cve-header">
-                                                    <span className="cve-id">{cve.cve_id}</span>
-                                                    <span className="cve-severity" style={{ background: severityColor(cve.severity) }}>
-                                                        {cve.severity}
-                                                    </span>
-                                                </div>
-                                                <div className="cve-lib">{cve.library}</div>
-                                                <div className="cve-desc">{cve.description}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Linked Libraries */}
-                            {report.linked_libraries && report.linked_libraries.length > 0 && (
-                                <div className="section libraries">
-                                    <h4>📦 Linked Libraries</h4>
-                                    <div className="lib-tags">
-                                        {report.linked_libraries.map((lib, i) => (
-                                            <span key={i} className="lib-tag">{lib}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="error-state">No report available.</div>
-                    )}
-                </div>
-            </motion.div>
-        </motion.div>
-    );
-}
-
-function ProgramSummaryModal({ summary, loading, close }) {
-    const handleDownload = () => {
-        if (!summary) return;
-        const text = generateSummaryReportText(summary);
-        downloadFile(text, `hexplain_program_summary_${Date.now()}.txt`);
-    };
-
-    return (
-        <motion.div
-            className="modal-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={close}
-        >
-            <motion.div
-                className="modal-content"
-                initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <h3><FileCode size={20} /> Program Summary & Analysis</h3>
-                    <div className="modal-header-actions">
-                        {summary && !loading && (
-                            <button className="download-btn" onClick={handleDownload} title="Download Summary">
-                                <Download size={16} /> Download
-                            </button>
-                        )}
-                        <button className="close-btn" onClick={close}><X size={18} /></button>
-                    </div>
-                </div>
-
-                <div className="modal-body">
-                    {loading ? (
-                        <div className="loading-state">
-                            <div className="spinner"></div>
-                            <p>Analyzing program logic... this may take a moment.</p>
-                        </div>
-                    ) : summary ? (
-                        <div className="report-container">
-                            <div className="section summary">
-                                <div className="security-summary">
-                                    <ReactMarkdown>{summary}</ReactMarkdown>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="error-state">Failed to generate summary.</div>
-                    )}
-                </div>
-            </motion.div>
-        </motion.div>
-    );
-}
-
-function MalwareModal({ report, loading, close }) {
-    const riskColor = (level) => {
-        const l = (level || '').toUpperCase();
-        if (l === 'CRITICAL') return '#ff2222';
-        if (l === 'HIGH') return '#ff6600';
-        if (l === 'MEDIUM') return '#ffaa00';
-        if (l === 'LOW') return '#44bb44';
-        return '#666';
-    };
-
-    const severityBadgeColor = (sev) => {
-        const s = (sev || '').toUpperCase();
-        if (s === 'CRITICAL') return '#ff2222';
-        if (s === 'HIGH') return '#ff6600';
-        if (s === 'MEDIUM') return '#ffaa00';
-        if (s === 'LOW') return '#44bb44';
-        return '#888';
-    };
-
-    const handleDownload = () => {
-        if (!report) return;
-        const lines = [];
-        lines.push('═══════════════════════════════════════════════════');
-        lines.push('        HEXPLAIN — MALWARE BEHAVIOR REPORT');
-        lines.push('═══════════════════════════════════════════════════');
-        lines.push(`Generated: ${new Date().toLocaleString()}`);
-        lines.push(`Risk Score: ${report.risk_score}/100`);
-        lines.push(`Risk Level: ${report.risk_level}`);
-        lines.push(`Total Indicators: ${report.total_indicators}`);
-        lines.push('');
-
-        if (report.ai_assessment) {
-            lines.push('───────────────────────────────────────────────────');
-            lines.push('🔬 AI THREAT ASSESSMENT');
-            lines.push('───────────────────────────────────────────────────');
-            lines.push(report.ai_assessment);
-            lines.push('');
+        const contextMessages = [];
+        if (currentCode && selectedFunction) {
+            const code = currentCode.length > 8000
+                ? currentCode.slice(0, 8000) + '\n// ... [truncated] ...'
+                : currentCode;
+            contextMessages.push({
+                role: 'system',
+                content: (
+                    `The user is currently viewing the decompiled function \`${selectedFunction}\` ` +
+                    `from binary "${binaryName || 'uploaded binary'}":\n\n` +
+                    `\`\`\`c\n${code}\n\`\`\`\n\n` +
+                    `When the user says "this function" or "this code", they mean the function above.`
+                )
+            });
+        } else if (binaryName) {
+            contextMessages.push({
+                role: 'system',
+                content: `User has uploaded binary "${binaryName}". No function is currently selected.`
+            });
         }
 
-        (report.categories || []).forEach(cat => {
-            lines.push('───────────────────────────────────────────────────');
-            lines.push(`${cat.label} (${cat.count} indicators)`);
-            lines.push('───────────────────────────────────────────────────');
-            cat.findings.forEach(f => {
-                lines.push(`  [${f.severity}] ${f.description}`);
-                lines.push(`    Function: ${f.function} | Line: ${f.line}`);
-                lines.push(`    Code: ${f.code}`);
-                lines.push('');
-            });
-        });
-
-        lines.push('═══════════════════════════════════════════════════');
-        lines.push('              End of Report — Hexplain');
-        lines.push('═══════════════════════════════════════════════════');
-        downloadFile(lines.join('\n'), `hexplain_malware_report_${Date.now()}.txt`);
-    };
-
-    return (
-        <motion.div
-            className="modal-overlay"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={close}
-        >
-            <motion.div
-                className="modal-content modal-wide"
-                initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <h3><Bug size={20} /> Malware Behavior Analysis</h3>
-                    <div className="modal-header-actions">
-                        {report && !loading && (
-                            <button className="download-btn" onClick={handleDownload} title="Download Report">
-                                <Download size={16} /> Download
-                            </button>
-                        )}
-                        <button className="close-btn" onClick={close}><X size={18} /></button>
-                    </div>
-                </div>
-
-                <div className="modal-body">
-                    {loading ? (
-                        <div className="loading-state">
-                            <div className="spinner"></div>
-                            <p>Scanning for malware behavioral indicators...</p>
-                        </div>
-                    ) : report ? (
-                        <div className="report-container">
-                            {/* Risk Score Overview */}
-                            <div className="section malware-overview">
-                                <div className="risk-score-card" style={{ borderColor: riskColor(report.risk_level) }}>
-                                    <div className="risk-score-number" style={{ color: riskColor(report.risk_level) }}>
-                                        {report.risk_score}
-                                    </div>
-                                    <div className="risk-score-label">Risk Score</div>
-                                    <div className="risk-level-badge" style={{ background: riskColor(report.risk_level) }}>
-                                        {report.risk_level}
-                                    </div>
-                                </div>
-                                <div className="severity-breakdown">
-                                    <div className="severity-item critical">
-                                        <span className="severity-count">{report.severity_counts?.CRITICAL || 0}</span>
-                                        <span className="severity-label">Critical</span>
-                                    </div>
-                                    <div className="severity-item high">
-                                        <span className="severity-count">{report.severity_counts?.HIGH || 0}</span>
-                                        <span className="severity-label">High</span>
-                                    </div>
-                                    <div className="severity-item medium">
-                                        <span className="severity-count">{report.severity_counts?.MEDIUM || 0}</span>
-                                        <span className="severity-label">Medium</span>
-                                    </div>
-                                    <div className="severity-item low">
-                                        <span className="severity-count">{report.severity_counts?.LOW || 0}</span>
-                                        <span className="severity-label">Low</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* AI Threat Assessment */}
-                            {report.ai_assessment && (
-                                <div className="section summary">
-                                    <h4>🔬 AI Threat Assessment</h4>
-                                    <div className="security-summary">
-                                        <ReactMarkdown>{report.ai_assessment}</ReactMarkdown>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Categorized Findings */}
-                            {(report.categories || []).map((cat, ci) => (
-                                <div key={ci} className="section malware-category">
-                                    <h4>{cat.label} <span className="cat-count">({cat.count})</span></h4>
-                                    <div className="malware-findings-list">
-                                        {cat.findings.map((finding, fi) => (
-                                            <div key={fi} className="malware-finding-card">
-                                                <div className="finding-header">
-                                                    <span className="finding-severity" style={{ background: severityBadgeColor(finding.severity) }}>
-                                                        {finding.severity}
-                                                    </span>
-                                                    <span className="finding-desc">{finding.description}</span>
-                                                </div>
-                                                <div className="finding-location">
-                                                    <span className="call-site-func">{finding.function}</span>
-                                                    <span className="call-site-line">Line {finding.line}</span>
-                                                </div>
-                                                <code className="call-site-code">{finding.code}</code>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-
-                            {report.total_indicators === 0 && (
-                                <div className="section">
-                                    <div className="empty-flaws">
-                                        <CheckCircle size={14} /> No malware behavioral indicators detected.
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="error-state">No report available.</div>
-                    )}
-                </div>
-            </motion.div>
-        </motion.div>
-    );
-}
-
-function ChatPanel({ open, toggle }) {
-    const [messages, setMessages] = useState([
-        { role: 'assistant', content: 'Hello! I am ready to explain your binary code.' }
-    ]);
-    const [input, setInput] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    const sendMessage = async () => {
-        if (!input.trim()) return;
-
-        const newMsg = { role: 'user', content: input };
-        setMessages(prev => [...prev, newMsg]);
-        setInput("");
-        setLoading(true);
+        const cleanHistory = historyToSend.filter(m => m.role === 'user' || m.role === 'assistant');
 
         try {
             const res = await axios.post(`${API_BASE}/chat`, {
-                messages: [...messages, newMsg],
-                model: "llama3.2",
-                provider: "local"
+                messages: [...contextMessages, ...cleanHistory],
+                model: 'llama3.2',
+                provider: 'local'
             });
-
             setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
-        } catch (err) {
-            setMessages(prev => [...prev, { role: 'system', content: "**Error**: Could not connect to AI backend or Local LLM is offline." }]);
+        } catch {
+            setMessages(prev => [...prev, {
+                role: 'error',
+                content: '⚠️ Could not reach AI backend. Is Ollama running?'
+            }]);
         } finally {
             setLoading(false);
         }
     };
 
+    const quickActions = [
+        { label: 'Explain this function', icon: <Brain size={12} />, msg: 'Explain what this function does in detail.' },
+        { label: 'Find vulnerabilities', icon: <AlertTriangle size={12} />, msg: 'Are there any security vulnerabilities or dangerous patterns in this function?' },
+        { label: 'Identify purpose', icon: <Zap size={12} />, msg: 'What is the likely purpose of this function? Is it part of malware or benign software?' },
+    ];
+
     return (
-        <div className={`chat-panel ${open ? 'open' : 'closed'}`}>
-            <div className="chat-header" onClick={toggle}>
-                <MessageSquare size={18} /> AI Assistant
+        <aside className="hx-chat-panel">
+            {/* Chat Header */}
+            <div className="hx-chat-header">
+                <div className="hx-chat-header-left">
+                    <div className="hx-chat-brain-icon"><Brain size={18} /></div>
+                    <div>
+                        <div className="hx-chat-title">Hexplain Assistant</div>
+                        <div className="hx-chat-subtitle">Live AI Reverse Engineering Help</div>
+                    </div>
+                </div>
+                <div className="hx-chat-status">
+                    <div className="hx-status-dot active" />
+                </div>
             </div>
 
-            <div className="chat-body">
+            {/* Context Badge */}
+            {selectedFunction && (
+                <div className="hx-chat-context">
+                    <Terminal size={11} />
+                    <span>Viewing: <code>{selectedFunction}</code></span>
+                </div>
+            )}
+
+            {/* Message Body */}
+            <div className="hx-chat-body" ref={chatBodyRef}>
                 {messages.map((m, i) => (
-                    <div key={i} className={`msg ${m.role}`}>
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                    <div key={i} className={`hx-msg hx-msg-${m.role}`}>
+                        {m.role === 'assistant' && (
+                            <div className="hx-msg-avatar ai">
+                                <Brain size={12} />
+                            </div>
+                        )}
+                        <div className="hx-msg-bubble">
+                            <ReactMarkdown>{m.content}</ReactMarkdown>
+                        </div>
                     </div>
                 ))}
-                {loading && <div className="msg assistant typing">typing...</div>}
+                {loading && (
+                    <div className="hx-msg hx-msg-assistant">
+                        <div className="hx-msg-avatar ai"><Brain size={12} /></div>
+                        <div className="hx-msg-bubble hx-typing">
+                            <span className="dot" /><span className="dot" /><span className="dot" />
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <div className="chat-input">
-                <input
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                    placeholder="Ask about this code..."
-                />
+            {/* Quick Actions */}
+            {selectedFunction && !loading && (
+                <div className="hx-quick-actions">
+                    {quickActions.map((qa, i) => (
+                        <button key={i} className="hx-quick-btn" onClick={() => sendMessage(qa.msg)}>
+                            {qa.icon} {qa.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Input */}
+            <div className="hx-chat-input-area">
+                <div className="hx-chat-input-row">
+                    <input
+                        className="hx-chat-input"
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                        placeholder={
+                            selectedFunction
+                                ? `Ask about ${selectedFunction}…`
+                                : 'Ask about the binary…'
+                        }
+                        disabled={loading}
+                    />
+                    <button
+                        className="hx-send-btn"
+                        onClick={() => sendMessage()}
+                        disabled={loading || !input.trim()}
+                    >
+                        <ChevronRight size={18} />
+                    </button>
+                </div>
             </div>
+        </aside>
+    );
+}
+
+// ─── Security Modal ───────────────────────────────────────
+function SecurityModal({ report, loading, close }) {
+    const severityColor = s => {
+        const v = (s || '').toUpperCase();
+        if (v === 'CRITICAL') return '#ff4444';
+        if (v === 'HIGH') return '#ff8800';
+        if (v === 'MEDIUM') return '#ffcc00';
+        return '#44cc44';
+    };
+    const handleDownload = () => {
+        if (!report) return;
+        const lines = [];
+        lines.push('HEXPLAIN — SECURITY ANALYSIS REPORT');
+        lines.push(new Date().toLocaleString());
+        if (report.explanation) lines.push('\nSECURITY ASSESSMENT\n' + report.explanation);
+        lines.push('\nMITIGATIONS');
+        for (const [k, v] of Object.entries(report.mitigations || {}))
+            lines.push(`  ${k}: ${v === true ? 'ENABLED' : v === false ? 'DISABLED' : v}`);
+        downloadFile(lines.join('\n'), `hexplain_security_${Date.now()}.txt`);
+    };
+
+    return (
+        <motion.div className="hx-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
+            <motion.div className="hx-modal" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} onClick={e => e.stopPropagation()}>
+                <div className="hx-modal-header">
+                    <div className="hx-modal-title"><Shield size={18} /> Security Analysis</div>
+                    <div className="hx-modal-actions">
+                        {report && !loading && (
+                            <button className="hx-modal-dl-btn" onClick={handleDownload}><Download size={14} /> Download</button>
+                        )}
+                        <button className="hx-modal-close" onClick={close}><X size={18} /></button>
+                    </div>
+                </div>
+                <div className="hx-modal-body">
+                    {loading ? <ModalLoader text="Running comprehensive security scan…" /> : report ? (
+                        <div>
+                            {report.explanation && (
+                                <div className="hx-modal-section">
+                                    <h4>🔍 AI Security Assessment</h4>
+                                    <div className="hx-ai-text"><ReactMarkdown>{report.explanation}</ReactMarkdown></div>
+                                </div>
+                            )}
+                            <div className="hx-modal-section">
+                                <h4>🛡️ Binary Hardening Mitigations</h4>
+                                <div className="hx-mit-grid">
+                                    {Object.entries(report.mitigations || {}).map(([k, v]) => (
+                                        <div key={k} className={`hx-mit-card ${v === true || v === 'Full' ? 'safe' : v === false ? 'danger' : 'warn'}`}>
+                                            <div className="hx-mit-icon">
+                                                {v === true || v === 'Full' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                                            </div>
+                                            <div className="hx-mit-name">{k}</div>
+                                            <div className="hx-mit-val">{v === true ? 'Enabled' : v === false ? 'Disabled' : String(v)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            {report.flaws && (
+                                <div className="hx-modal-section">
+                                    <h4>⚠️ Potential Flaws</h4>
+                                    {report.flaws.length === 0 ? (
+                                        <div className="hx-ok-msg"><CheckCircle size={14} /> No obvious flaws detected.</div>
+                                    ) : (
+                                        <ul className="hx-flaws-list">
+                                            {report.flaws.map((f, i) => <li key={i}><AlertTriangle size={13} /> {f}</li>)}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
+                            {report.vulnerable_call_sites?.length > 0 && (
+                                <div className="hx-modal-section">
+                                    <h4>📍 Vulnerable Call Sites</h4>
+                                    <div className="hx-call-sites">
+                                        {report.vulnerable_call_sites.map((s, i) => (
+                                            <div key={i} className="hx-call-card">
+                                                <div className="hx-call-top">
+                                                    <span className="hx-call-fn">{s.function}</span>
+                                                    <span className="hx-call-line">Line {s.line}</span>
+                                                </div>
+                                                <div className="hx-call-danger"><AlertTriangle size={11} /> {s.dangerous_call}()</div>
+                                                <code className="hx-call-code">{s.context}</code>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {report.known_cves?.length > 0 && (
+                                <div className="hx-modal-section">
+                                    <h4>🗃️ Known CVEs</h4>
+                                    <div className="hx-cve-list">
+                                        {report.known_cves.map((c, i) => (
+                                            <div key={i} className="hx-cve-card">
+                                                <div className="hx-cve-top">
+                                                    <span className="hx-cve-id">{c.cve_id}</span>
+                                                    <span className="hx-cve-sev" style={{ background: severityColor(c.severity) }}>{c.severity}</span>
+                                                </div>
+                                                <div className="hx-cve-lib">{c.library}</div>
+                                                <div className="hx-cve-desc">{c.description}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {report.linked_libraries?.length > 0 && (
+                                <div className="hx-modal-section">
+                                    <h4>📦 Linked Libraries</h4>
+                                    <div className="hx-tags">
+                                        {report.linked_libraries.map((l, i) => <span key={i} className="hx-tag">{l}</span>)}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : <div className="hx-modal-err">No report available.</div>}
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ─── Program Summary Modal ────────────────────────────────
+function ProgramSummaryModal({ summary, loading, close }) {
+    return (
+        <motion.div className="hx-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
+            <motion.div className="hx-modal" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} onClick={e => e.stopPropagation()}>
+                <div className="hx-modal-header">
+                    <div className="hx-modal-title"><FileCode size={18} /> Program Summary</div>
+                    <div className="hx-modal-actions">
+                        {summary && !loading && (
+                            <button className="hx-modal-dl-btn" onClick={() => downloadFile(summary, `hexplain_summary_${Date.now()}.txt`)}>
+                                <Download size={14} /> Download
+                            </button>
+                        )}
+                        <button className="hx-modal-close" onClick={close}><X size={18} /></button>
+                    </div>
+                </div>
+                <div className="hx-modal-body">
+                    {loading ? <ModalLoader text="Synthesizing program behavior into narrative…" /> : summary ? (
+                        <div className="hx-narrative"><ReactMarkdown>{summary}</ReactMarkdown></div>
+                    ) : <div className="hx-modal-err">Failed to generate summary.</div>}
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ─── Malware Modal ────────────────────────────────────────
+function MalwareModal({ report, loading, close }) {
+    const riskColor = l => {
+        const v = (l || '').toUpperCase();
+        if (v === 'CRITICAL') return '#ff2222';
+        if (v === 'HIGH') return '#ff6600';
+        if (v === 'MEDIUM') return '#ffaa00';
+        return '#44bb44';
+    };
+    return (
+        <motion.div className="hx-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
+            <motion.div className="hx-modal" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} onClick={e => e.stopPropagation()}>
+                <div className="hx-modal-header">
+                    <div className="hx-modal-title"><Bug size={18} /> Malware Behavior Analysis</div>
+                    <div className="hx-modal-actions">
+                        <button className="hx-modal-close" onClick={close}><X size={18} /></button>
+                    </div>
+                </div>
+                <div className="hx-modal-body">
+                    {loading ? <ModalLoader text="Scanning for malware behavioral indicators…" /> : report ? (
+                        <div>
+                            <div className="hx-risk-overview">
+                                <div className="hx-risk-score-card" style={{ borderColor: riskColor(report.risk_level) }}>
+                                    <div className="hx-risk-num" style={{ color: riskColor(report.risk_level) }}>{report.risk_score}</div>
+                                    <div className="hx-risk-label">Risk Score</div>
+                                    <div className="hx-risk-badge" style={{ background: riskColor(report.risk_level) }}>{report.risk_level}</div>
+                                </div>
+                                <div className="hx-sev-grid">
+                                    {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
+                                        <div key={s} className={`hx-sev-item hx-sev-${s.toLowerCase()}`}>
+                                            <div className="hx-sev-count">{report.severity_counts?.[s] || 0}</div>
+                                            <div className="hx-sev-name">{s}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            {report.ai_assessment && (
+                                <div className="hx-modal-section">
+                                    <h4>🔬 AI Threat Assessment</h4>
+                                    <div className="hx-ai-text"><ReactMarkdown>{report.ai_assessment}</ReactMarkdown></div>
+                                </div>
+                            )}
+                            {(report.categories || []).map((cat, ci) => (
+                                <div key={ci} className="hx-modal-section">
+                                    <h4>{cat.label} <span className="hx-cat-count">({cat.count})</span></h4>
+                                    <div className="hx-findings">
+                                        {cat.findings.map((f, fi) => (
+                                            <div key={fi} className="hx-finding-card">
+                                                <div className="hx-finding-top">
+                                                    <span className="hx-finding-sev" style={{ background: riskColor(f.severity) }}>{f.severity}</span>
+                                                    <span className="hx-finding-desc">{f.description}</span>
+                                                </div>
+                                                <div className="hx-finding-loc">
+                                                    <span className="hx-call-fn">{f.function}</span>
+                                                    <span className="hx-call-line">Line {f.line}</span>
+                                                </div>
+                                                <code className="hx-call-code">{f.code}</code>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                            {report.total_indicators === 0 && (
+                                <div className="hx-ok-msg"><CheckCircle size={14} /> No malware indicators detected.</div>
+                            )}
+                        </div>
+                    ) : <div className="hx-modal-err">No report available.</div>}
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ─── Modal Loader ─────────────────────────────────────────
+function ModalLoader({ text }) {
+    return (
+        <div className="hx-modal-loader">
+            <div className="hx-large-spinner" />
+            <p>{text}</p>
         </div>
     );
 }
 
+// ─── Error Boundary ───────────────────────────────────────
 class ErrorBoundary extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = { hasError: false, error: null };
-    }
-
-    static getDerivedStateFromError(error) {
-        return { hasError: true, error };
-    }
-
-    componentDidCatch(error, errorInfo) {
-        console.error("ErrorBoundary caught an error", error, errorInfo);
-    }
-
+    state = { hasError: false, error: null };
+    static getDerivedStateFromError(error) { return { hasError: true, error }; }
+    componentDidCatch(e, info) { console.error(e, info); }
     render() {
-        if (this.state.hasError) {
-            return (
-                <div style={{ padding: '20px', color: 'red' }}>
-                    <h1>Something went wrong.</h1>
-                    <pre>{this.state.error && this.state.error.toString()}</pre>
-                </div>
-            );
-        }
-
+        if (this.state.hasError) return (
+            <div style={{ padding: 40, color: '#ff4444', fontFamily: 'monospace' }}>
+                <h2>Something went wrong.</h2>
+                <pre>{this.state.error?.toString()}</pre>
+            </div>
+        );
         return this.props.children;
     }
 }
 
 export default function WrappedApp() {
-    return (
-        <ErrorBoundary>
-            <App />
-        </ErrorBoundary>
-    );
+    return <ErrorBoundary><App /></ErrorBoundary>;
 }

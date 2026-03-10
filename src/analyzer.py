@@ -96,7 +96,7 @@ class GhidraAnalyzer:
                 name = func.getName()
                 print(f"Decompiling {name}...")
                 
-                decomp_res = decomp_interface.decompileFunction(func, 0, monitor)
+                decomp_res = decomp_interface.decompileFunction(func, 30, monitor)
                 if decomp_res.decompileCompleted():
                     c_code = decomp_res.getDecompiledFunction().getC()
                     results[name] = c_code
