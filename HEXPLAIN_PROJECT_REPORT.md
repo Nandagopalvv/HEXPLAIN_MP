@@ -32,9 +32,9 @@
 
 ## 1. Abstract
 
-**Hexplain** is an AI-powered binary reverse engineering tool that combines the power of Ghidra's decompilation engine with Large Language Models (LLMs) to automatically analyze, decompile, and explain compiled binary executables in natural language. The tool addresses a critical gap in cybersecurity — the difficulty of understanding compiled machine code without source code access. Hexplain integrates four core capabilities: (1) automated binary decompilation via PyGhidra, (2) AI-generated natural language explanations of decompiled code using Mistral/OpenAI, (3) comprehensive security vulnerability analysis including dangerous function detection, mitigation checks (NX, Canary, PIE, RELRO, FORTIFY), vulnerable call site tracking, and CVE matching via the NVD API, and (4) a Retrieval-Augmented Generation (RAG) pipeline using ChromaDB for contextual AI chat about the analyzed binary. The system features a modern React-based web interface with real-time analysis, downloadable reports, and an interactive AI assistant, alongside a traditional CLI interface. Hexplain demonstrates that combining traditional reverse engineering tools with modern AI can significantly reduce the expertise barrier for binary analysis, making it accessible to security analysts, students, and incident response teams.
+**Hexplain** is an AI-powered binary reverse engineering tool that combines the power of Ghidra's decompilation engine with Large Language Models (LLMs) to automatically analyze, decompile, and explain compiled binary executables in natural language. The tool addresses a critical gap in cybersecurity — the difficulty of understanding compiled machine code without source code access. Hexplain integrates five core capabilities: (1) automated binary decompilation via PyGhidra, (2) AI-generated natural language explanations of decompiled code using Mistral/OpenAI/LLaMA, (3) comprehensive security vulnerability analysis including dangerous function detection, mitigation checks (NX, Canary, PIE, RELRO, FORTIFY), and CVE matching via the NVD API, (4) dedicated malware behavior detection powered by a VirusTotal scanning engine, and (5) a Retrieval-Augmented Generation (RAG) pipeline using ChromaDB for contextual AI chat about the analyzed binary. The system features a professional cybersecurity dashboard UI with real-time analysis, downloadable reports, and an interactive AI assistant. Hexplain demonstrates that combining traditional reverse engineering tools with modern AI can significantly reduce the expertise barrier for binary analysis, making it accessible to security analysts, students, and incident response teams.
 
-**Keywords:** Reverse Engineering, Binary Analysis, Large Language Models, Ghidra, Decompilation, Security Analysis, RAG, Vulnerability Detection, NLP
+**Keywords:** Reverse Engineering, Binary Analysis, Large Language Models, Ghidra, Malware Detection, VirusTotal, Decompilation, Security Analysis, RAG, NLP
 
 ---
 
@@ -155,11 +155,12 @@ The typical binary analysis workflow involves:
 Hexplain is a **unified, AI-powered binary reverse engineering platform** that combines:
 
 1. **Automated Decompilation Engine** — Uses Ghidra via PyGhidra for headless binary analysis and decompilation
-2. **AI Explanation Module** — Leverages LLMs (Mistral via Ollama or OpenAI) to explain code in natural language
-3. **Security Analysis Pipeline** — Four-phase security assessment (Ghidra analysis, ELF header analysis, call site tracking, CVE matching)
-4. **RAG-Powered Chat** — ChromaDB-backed contextual AI assistant for interactive Q&A about the binary
-5. **Modern Web Interface** — React-based UI with real-time analysis, modals, and downloadable reports
-6. **CLI Interface** — Traditional command-line tool for scripting and automation
+2. **AI Explanation Module** — Leverages LLMs (Mistral, LLaMA, or OpenAI) to explain code and generate threat reports
+3. **Security Analysis Pipeline** — Multi-phase security assessment (Ghidra symbols, ELF headers, CVE matching)
+4. **Malware Detection Engine** — Integration with VirusTotal API for hash lookups and automated binary analysis
+5. **RAG-Powered Chat** — ChromaDB-backed contextual AI assistant with streaming sequential embedding
+6. **Cybersecurity Dashboard** — Modern React-based UI with neon-themed professional dashboard aesthetic
+7. **CLI Interface** — Traditional command-line tool for scripting and automation
 
 ### 6.2 Key Advantages Over Existing Systems
 
@@ -176,45 +177,43 @@ Hexplain is a **unified, AI-powered binary reverse engineering platform** that c
 
 ### 6.3 System Modules
 
-#### Module 1: GhidraAnalyzer (`analyzer.py` — 378 lines)
+#### Module 1: GhidraAnalyzer (`analyzer.py` — 392 lines)
 - Binary loading and validation
 - Headless Ghidra decompilation via PyGhidra
 - Symbol table analysis for dangerous function detection
-- NX bit verification through memory block analysis
-- Stack canary detection (`__stack_chk_fail`)
-- FORTIFY_SOURCE detection (18 `__*_chk` function variants)
+- Security mitigation detection: NX, Canary, FORTIFY_SOURCE
 - ELF header analysis for PIE and RELRO via pyelftools
-- Vulnerable call site tracking with regex-based pattern matching
 - CVE matching through the NVD REST API v2.0
 
-#### Module 2: CodeExplainer (`explainer.py` — 216 lines)
-- OpenAI-compatible API client (supports both Ollama and OpenAI)
-- Per-function code explanation with reverse engineering system prompts
-- Program-level summary generation with context-aware truncation
-- Security report natural language assessment
-- RAG-enhanced conversational chat with context injection
+#### Module 2: CodeExplainer (`explainer.py` — 385 lines)
+- Multi-provider API client (Ollama/OpenAI) supporting latest models (LLaMA 3.2, Mistral)
+- Context-aware code explanation and narrative program-level summaries
+- Security and Malware natural language threat assessment
+- RAG-integrated chat orchestration with streaming support
 
-#### Module 3: RAGManager (`rag_manager.py` — 100 lines)
-- ChromaDB persistent vector storage
-- Ollama-powered embedding generation
-- Function indexing with metadata (name, binary path)
-- Semantic similarity search for query-relevant code retrieval
+#### Module 3: RAGManager (`rag_manager.py` — 264 lines)
+- ChromaDB persistent vector storage with sequential streaming embedding
+- Smart code chunking for large binaries (max 2400 chars per chunk)
+- Micro-batching (batch size 50) for memory-efficient ChromaDB updates
+- Exponential back-off retry logic for stable Ollama embedding generation
 
-#### Module 4: FastAPI Server (`server.py` — 147 lines)
-- RESTful API with CORS support
-- Endpoints: `/upload`, `/analyze`, `/analyze_security`, `/explain_program`, `/chat`
-- In-memory analysis caching for performance
-- Stateful session management
+#### Module 4: MalwareDetector (`malware_detector.py` — 227 lines)
+- VirusTotal API v3 integration for automated malware scanning
+- Adaptive polling for new file analyses (VT free tier compliant)
+- SHA-256 hash lookup and high-confidence reputation scoring
+- Detailed engine-level detection reporting (Antivirus scan matrix)
 
-#### Module 5: React Frontend (`hexplain-ui/` — React + Vite)
-- Binary upload with drag-and-drop
-- Decompiled code viewer with syntax highlighting (C language)
-- Function navigation sidebar
-- Security Analysis modal with mitigations grid, flaws, call sites, CVEs
-- Program Summary modal with Markdown rendering
-- Interactive AI chat panel with RAG support
-- Downloadable reports (Security & Summary)
-- Error boundary for graceful error handling
+#### Module 5: FastAPI Server (`server.py` — 386 lines)
+- Asynchronous RESTful API with background task orchestration
+- Parallelized NVD CVE lookups via ThreadPoolExecutor
+- Stateful session management and in-memory analysis caching
+- Streaming chat endpoints (`chat_stream`) for low-latency AI interaction
+
+#### Module 6: React Frontend (`hexplain-ui/` — React + Vite)
+- Professional cybersecurity dashboard with neon highlights and dark theme
+- Three-panel layout: Function Browser, Code View, and Real-time AI Assistant
+- Live analysis progress trackers and integrated status notifications
+- One-click report export (Security, Program Summary, Malware Assessment)
 
 ---
 
@@ -326,43 +325,42 @@ Hexplain is a **unified, AI-powered binary reverse engineering platform** that c
 │  │  │ /upload  │ │ /analyze │ │ /chat  │ │/analyze_     │   │      │
 │  │  │          │ │          │ │        │ │ security     │   │      │
 │  │  └──────────┘ └──────────┘ └────────┘ └──────────────┘   │      │
-│  │  ┌──────────────────┐                                     │      │
-│  │  │/explain_program  │      In-Memory Cache                │      │
-│  │  └──────────────────┘                                     │      │
+│  │  ┌──────────────────┐      ┌──────────────────┐           │      │
+│  │  │/analyze_malware  │      │/explain_program  │           │      │
+│  │  └──────────────────┘      └──────────────────┘           │      │
 │  └────────────────────────────────────────────────────────────┘      │
 │            │                 │                   │                    │
 │            ▼                 ▼                   ▼                    │
 │  ┌────────────────────────────────────────────────────────────┐      │
 │  │                    CORE ENGINE LAYER                       │      │
 │  │                                                            │      │
-│  │  ┌─────────────────┐  ┌──────────────────┐                │      │
-│  │  │ GhidraAnalyzer  │  │  CodeExplainer   │                │      │
-│  │  │  (analyzer.py)  │  │  (explainer.py)  │                │      │
-│  │  │                 │  │                  │                │      │
-│  │  │ • Decompile     │  │ • Explain Code   │                │      │
-│  │  │ • Security Scan │  │ • Security NLP   │                │      │
-│  │  │ • ELF Headers   │  │ • Program Summary│                │      │
-│  │  │ • Call Sites    │  │ • Chat w/ RAG    │                │      │
-│  │  │ • CVE Match     │  │                  │                │      │
-│  │  └────────┬────────┘  └────────┬─────────┘                │      │
-│  │           │                    │                           │      │
-│  │  ┌────────┴────────────────────┴─────────┐                │      │
-│  │  │            RAGManager                  │                │      │
-│  │  │         (rag_manager.py)               │                │      │
-│  │  │  • Index Functions (Embeddings)        │                │      │
-│  │  │  • Query Relevant Code (Similarity)    │                │      │
-│  │  └──────────────┬────────────────────────┘                │      │
-│  └─────────────────┼─────────────────────────────────────────┘      │
+│  │  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────┐│      │
+│  │  │ GhidraAnalyzer  │  │  CodeExplainer   │  │MalwareDetect ││      │
+│  │  │  (analyzer.py)  │  │  (explainer.py)  │  │(malware_det) ││      │
+│  │  │                 │  │                  │  │              ││      │
+│  │  │ • Decompile     │  │ • Explain Code   │  │• VT Lookup   ││      │
+│  │  │ • Security Scan │  │ • Security NLP   │  │• Hash Check  ││      │
+│  │  │ • ELF Headers   │  │ • Program Summary│  │• File Upload ││      │
+│  │  │ • CVE Match     │  │ • Chat w/ RAG    │  │• Polling     ││      │
+│  │  └────────┬────────┘  └────────┬─────────┘  └──────┬───────┘│      │
+│  │           │                    │                   │       │      │
+│  │  ┌────────┴────────────────────┴─────────┐         │       │      │
+│  │  │            RAGManager                  │◄────────┘       │      │
+│  │  │         (rag_manager.py)               │                 │      │
+│  │  │  • Index Functions (Embeddings)        │                 │      │
+│  │  │  • Query Relevant Code (Similarity)    │                 │      │
+│  │  └──────────────┬────────────────────────┘                 │      │
+│  └─────────────────┼──────────────────────────────────────────┘      │
 │                    │                                                  │
 │                    ▼                                                  │
 │  ┌────────────────────────────────────────────────────────────┐      │
 │  │                   EXTERNAL SERVICES                        │      │
 │  │                                                            │      │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │      │
-│  │  │  Ghidra  │  │  Ollama  │  │ ChromaDB │  │ NVD API  │  │      │
-│  │  │ (Java)   │  │ (LLM)   │  │ (Vector) │  │ (CVEs)   │  │      │
+│  │  │  Ghidra  │  │  Ollama  │  │ ChromaDB │  │ NVD/VT   │  │      │
+│  │  │ (Java)   │  │ (LLM)   │  │ (Vector) │  │ (APIs)   │  │      │
 │  │  │          │  │          │  │          │  │          │  │      │
-│  │  │ Decompile│  │ Mistral  │  │ Persist  │  │ REST v2  │  │      │
+│  │  │ Decompile│  │ Mistral  │  │ Persist  │  │ CVE/Scan │  │      │
 │  │  │ Analyze  │  │ Embed    │  │ Retrieve │  │ Lookup   │  │      │
 │  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │      │
 │  └────────────────────────────────────────────────────────────┘      │
@@ -375,32 +373,31 @@ Hexplain is a **unified, AI-powered binary reverse engineering platform** that c
 Binary File (.elf/.exe)
     │
     ▼
-[Upload to Server] ──→ Temp Storage
+[Upload to Server] ──→ [MalwareDetector] ──→ VirusTotal Scan (Asynchronous)
     │
     ▼
 [GhidraAnalyzer.decompile()]
     │
     ├──→ Decompiled C Code (Dict[func_name → C_code])
     │         │
-    │         ├──→ [RAGManager.index_functions()] ──→ ChromaDB (Embeddings)
+    │         ├──→ [RAGManager.index_functions()] (Streaming) ──→ ChromaDB
     │         │
-    │         ├──→ [Frontend: Code Viewer with Syntax Highlighting]
+    │         ├──→ [Frontend: Dashboard with Real-time Analysis]
     │         │
-    │         └──→ [CodeExplainer.explain_program()] ──→ LLM ──→ Summary
+    │         └──→ [CodeExplainer.explain_program()] (Context-aware) ──→ Summary
     │
     ▼
 [GhidraAnalyzer.analyze_security()]
     │
-    ├── Phase 1: Ghidra Symbol Analysis (Canary, NX, Dangerous Funcs)
-    ├── Phase 2: ELF Header Analysis (PIE, RELRO) via pyelftools
-    ├── Phase 3: Call Site Tracking (Regex on decompiled code)
-    └── Phase 4: CVE Matching (NVD REST API)
+    ├── Phase 1: Mitigation Detection (Canary, NX, Fortify)
+    ├── Phase 2: ELF Header Analysis (PIE, RELRO)
+    └── Phase 3: CVE Matching (NVD REST API)
             │
             ▼
-    [CodeExplainer.explain_security_report()] ──→ LLM ──→ NL Assessment
+    [CodeExplainer.explain_security_report()] ──→ LLM Assessment
             │
             ▼
-    [Frontend: Security Modal + Downloadable Report]
+    [Frontend: Security Dashboard + Downloadable Reports]
 ```
 
 ### 8.2 Use Case Diagram
@@ -537,18 +534,19 @@ Hexplain was evaluated against existing binary analysis tools across key paramet
 | Feature | Ghidra (Standalone) | IDA Pro | checksec | Hexplain |
 |---------|-------------------|---------|----------|----------|
 | Decompilation | ✅ Yes | ✅ Yes | ❌ No | ✅ Yes (via Ghidra) |
-| AI Code Explanation | ❌ No | ❌ No | ❌ No | ✅ Yes (Mistral/GPT) |
-| Security Mitigations | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| AI Code Explanation | ❌ No | ❌ No | ❌ No | ✅ Yes (Mistral/LLaMA) |
+| Security Mitigations | ❌ No | ❌ No | ✅ Yes | ✅ Yes (Multi-phase) |
+| Malware Scanning | ❌ No | ⚠️ Plugin | ❌ No | ✅ Yes (VirusTotal) |
 | CVE Matching | ❌ No | ❌ No | ❌ No | ✅ Yes (NVD API) |
 | Call Site Tracking | ⚠️ Manual | ⚠️ Manual | ❌ No | ✅ Automated |
-| RAG Chat | ❌ No | ❌ No | ❌ No | ✅ Yes |
-| Web Interface | ❌ No | ❌ No | ❌ No | ✅ Yes |
-| Report Export | ❌ No | ⚠️ Limited | ❌ No | ✅ Yes |
+| RAG Chat | ❌ No | ❌ No | ❌ No | ✅ Yes (Streaming) |
+| Web Interface | ❌ No | ❌ No | ❌ No | ✅ Yes (Dashboard) |
+| Report Export | ❌ No | ⚠️ Limited | ❌ No | ✅ Yes (Direct) |
 | Local AI (Offline) | N/A | N/A | N/A | ✅ Yes (Ollama) |
 | Open Source | ✅ Yes | ❌ No ($1,879+) | ✅ Yes | ✅ Yes |
 | ELF Header Analysis | ⚠️ Limited | ✅ Yes | ✅ Yes | ✅ Yes (pyelftools) |
 
-**Key Finding**: Hexplain is the **only tool** that combines all six capabilities (decompilation, AI explanation, security analysis, CVE matching, RAG chat, and web interface) in a single platform.
+**Key Finding**: Hexplain is the **only tool** that integrates all seven core capabilities (decompilation, AI logic explanation, security auditing, malware scanning, CVE matching, RAG chat, and professional web dashboard) into a unified, open-source platform.
 
 ### 9.2 Algorithm Comparison
 
@@ -709,10 +707,9 @@ int main() {
 | NX (No-Execute) | W+X memory block scan | Ghidra Memory API | High |
 | PIE | ELF `e_type` (ET_DYN vs ET_EXEC) | pyelftools | High |
 | RELRO (Full) | PT_GNU_RELRO + DT_BIND_NOW | pyelftools | High |
-| RELRO (Partial) | PT_GNU_RELRO only | pyelftools | High |
 | FORTIFY_SOURCE | 18 `__*_chk` function imports | Ghidra Symbol Table | High |
+| Malware Status | VirusTotal Scan (Hash + Upload) | VirusTotal API v3 | High |
 | Dangerous Functions | 12-function import checklist | Ghidra Symbol Table | Medium-High |
-| Vulnerable Call Sites | Regex `\bfunc\s*\(` pattern | Decompiled Code | Medium |
 | Known CVEs | Library name keyword search | NVD API v2.0 | Medium |
 
 #### Table 3: LLM Model Comparison for Code Explanation
@@ -823,7 +820,7 @@ Hexplain successfully demonstrates that combining traditional reverse engineerin
 
 2. **AI-Powered Understanding**: Mistral 7B (via Ollama) generates meaningful, actionable explanations of decompiled code, reducing the expertise barrier significantly.
 
-3. **Comprehensive Security Analysis**: The 4-phase security pipeline (Ghidra symbols → ELF headers → call site tracking → CVE matching) provides thorough vulnerability assessment that would take hours to perform manually.
+3. **Comprehensive Security Analysis**: The multi-phase security pipeline (Ghidra symbols → ELF headers → Malware/VirusTotal scan → CVE matching) provides thorough vulnerability assessment that would take hours to perform manually.
 
 4. **RAG-Enhanced Context**: ChromaDB-backed semantic search enables the AI assistant to provide contextually relevant answers about analyzed binaries.
 
